@@ -1,0 +1,11 @@
+{
+    "python.defaultInterpreterPath": "/Users/faisalprasetya/Documents/repo/research/fin-regime-phasor/.venv/bin/python",
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports.ruff": "explicit",
+            "source.fixAll.ruff": "explicit"
+        }
+    }
+}
