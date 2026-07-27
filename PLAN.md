@@ -273,10 +273,10 @@ Use the fixed-width-window (FFD) variant in both searches (AFML §5.4), not the 
 
 **Verification plan.** Both $d^{*}_R$ and $d^{*}_\sigma$ are outputs of the search, not assumptions to bake in — there is no longer a predicted value for $d^{*}_R$ the way the original plan predicted $d^{*}_\theta\approx 0$; the point of this section is precisely to let the data determine how much memory the phase input can retain while staying stationary. $d^{*}_\sigma > 0$ remains the one directional prediction worth stating explicitly, per the long-memory argument above.
 
-### Open questions / risks
+### Decisions (formerly open questions)
 
-- Number of hidden regimes ($n$) is a real design choice, not just a value to grid-search: information criteria are known to under-select regime count in Markov-switching contexts, so an economically motivated choice (e.g., 2–4 interpretable regimes) may be preferable to picking $n$ by BIC alone.
-- The VQ-alphabet size for discretizing $(\sigma_i,\theta_i)$ trades resolution against Kraus-operator parameter count ($O(n^2\times|\mathcal{A}|)$) — needs its own small sweep, tuned only on training folds.
-- $k$ (phase sensitivity constant) interacts with the discretization step (it reshapes the distribution $\theta$ is drawn from before binning) — it may need to be tuned jointly with the VQ codebook rather than fixed in isolation.
-- Continuous-observable (POVM) HQMM avoids discretization entirely but has no settled reference implementation; treated as future work, not part of the initial plan.
+- **Regime count $n$:** decided by BIC, restricted to the interpretable range $n\in\{2,3,4\}$ (not an unbounded grid search) — picks up the caveat noted above (BIC under-selects regime count in Markov-switching contexts) by capping the search to economically interpretable candidates rather than letting BIC roam free.
+- **VQ-alphabet size:** confirmed — own small sweep over alphabet size, tuned on training folds only (per leakage-control discipline above).
+- **$k$ (phase sensitivity):** confirmed — tune jointly with the VQ codebook rather than fixed in isolation, since $k$ reshapes the $\theta$ distribution before binning.
+- **Continuous-observable (POVM) HQMM:** confirmed as future work — out of scope for the initial plan, no settled reference implementation to build on yet.
 
