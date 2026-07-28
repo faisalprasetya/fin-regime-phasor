@@ -220,6 +220,9 @@ __marimo__/
 # Project data (raw/processed market data, regenerated via pipeline)
 /data/
 
+# Cached raw data.binance.vision archives (data fetch-binance --cache-dir default)
+/.cache/
+
 # LaTeX build artifacts (latexmk / BasicTeX)
 *.aux
 *.bbl

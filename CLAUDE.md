@@ -8,7 +8,7 @@ Research project: build complex-valued "phasor" features (magnitude = Parkinson 
 
 ## Status
 
-Core pipeline implemented and tested (see layout below): phasor math, frac-diff + minimum-d search, dollar bars, VQ discretization, synthetic regime-switching data generator, classical baselines (Gaussian/categorical HMM, Hamilton, no-regime), HQMM (JAX Kraus operators), CUSUM structural breaks, 2x2 ablation-grid benchmark, backtest overlay (CPCV/embargo, deflated Sharpe, PBO), full Typer CLI, and a matplotlib paper style + figure commands. Not yet done: real market data ingestion (`data.binance.vision`), the paper itself, and running the pipeline end-to-end on real BTC/USDT data (everything so far is validated on synthetic ground truth + unit/property tests).
+Core pipeline implemented and tested (see layout below): real market data ingestion (`data.binance.vision` aggTrades archives, `data fetch-binance`), phasor math, frac-diff + minimum-d search, dollar bars, VQ discretization, synthetic regime-switching data generator, classical baselines (Gaussian/categorical HMM, Hamilton, no-regime), HQMM (JAX Kraus operators), CUSUM structural breaks, 2x2 ablation-grid benchmark, backtest overlay (CPCV/embargo, deflated Sharpe, PBO), full Typer CLI, and a matplotlib paper style + figure commands. Not yet done: the paper itself, and running the pipeline end-to-end on real BTC/USDT data at PLAN.md's full 2020-2025 scale (the ingestion path itself is implemented and tested; the rest of the pipeline so far has only been validated on synthetic ground truth + unit/property tests).
 
 ## Stack
 
@@ -28,7 +28,8 @@ Commands once dependencies are added:
 
 ## Layout (once code starts)
 
-- `src/fin_regime_phasor/` — installable package (bar construction, phasor features, frac-diff, VQ discretization, HQMM, classical baselines, backtest overlay)
+- `src/fin_regime_phasor/` — installable package (data ingestion, bar construction, phasor features, frac-diff, VQ discretization, HQMM, classical baselines, backtest overlay)
+- `src/fin_regime_phasor/data/` — `data.binance.vision` aggTrades ingestion (`binance.py`), producing the `timestamp`/`price`/`quantity` schema `bars.dollar_bars` consumes
 - `src/fin_regime_phasor/cli/` — Typer app; one sub-command module per canonical script (bar building, feature extraction, frac-diff search, HQMM training, baseline fitting, backtest run, etc.), all registered onto a single root Typer app as sub-commands
 - `tests/` — pytest, mirrors package structure; prioritize property/numerical tests on the phasor math (e.g. Weierstrass-identity closed form vs. direct `sin`/`cos`/`arctan` must match)
 - `notebooks/` — exploratory analysis, not imported by package code

@@ -166,6 +166,36 @@ def test_synthetic_generate_then_full_pipeline(tmp_path):
     assert figure_out.exists()
 
 
+def test_data_fetch_binance_cli(tmp_path, monkeypatch):
+    import polars as pl
+
+    from fin_regime_phasor.cli import data_cmd
+
+    fake_trades = pl.DataFrame(
+        {"timestamp": [1, 2], "price": [100.0, 101.0], "quantity": [0.1, 0.2]}
+    )
+    monkeypatch.setattr(data_cmd, "fetch_aggtrades", lambda *args, **kwargs: fake_trades)
+
+    out_path = tmp_path / "trades.parquet"
+    result = runner.invoke(
+        app,
+        [
+            "data",
+            "fetch-binance",
+            "--symbol",
+            "BTCUSDT",
+            "--start",
+            "2024-01",
+            "--end",
+            "2024-01",
+            "--out",
+            str(out_path),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert pl.read_parquet(out_path).height == 2
+
+
 def test_baselines_naive_cli(tmp_path):
     import polars as pl
 

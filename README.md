@@ -8,9 +8,9 @@ See [PLAN.md](PLAN.md) for the full research design: math derivations, candidate
 
 ## Status
 
-Core pipeline implemented and tested: phasor math, frac-diff + minimum-*d* search, dollar bars, VQ discretization, synthetic regime-switching data generator, classical baselines (Gaussian/categorical HMM, Hamilton, no-regime), HQMM (JAX Kraus operators), CUSUM structural breaks, 2x2 ablation-grid benchmark, backtest overlay (CPCV/embargo, deflated Sharpe, PBO), full Typer CLI, and a matplotlib paper style + figure commands.
+Core pipeline implemented and tested: real market data ingestion (`data.binance.vision` aggTrades archives), phasor math, frac-diff + minimum-*d* search, dollar bars, VQ discretization, synthetic regime-switching data generator, classical baselines (Gaussian/categorical HMM, Hamilton, no-regime), HQMM (JAX Kraus operators), CUSUM structural breaks, 2x2 ablation-grid benchmark, backtest overlay (CPCV/embargo, deflated Sharpe, PBO), full Typer CLI, and a matplotlib paper style + figure commands.
 
-Not yet done: real market data ingestion (`data.binance.vision`), the paper itself, and running the pipeline end-to-end on real BTC/USDT data — everything so far is validated on synthetic ground truth plus unit/property tests.
+Not yet done: the paper itself, and running the pipeline end-to-end on real BTC/USDT data at PLAN.md's full 2020-2025 scale — the ingestion path is implemented and tested, but the rest of the pipeline so far has only been validated on synthetic ground truth plus unit/property tests (per PLAN.md's research discipline: validate on synthetic ground truth before trusting output on real market data).
 
 ## Install
 
@@ -30,6 +30,7 @@ uv run fin-regime-phasor --help
 
 | Sub-command group | Purpose |
 |---|---|
+| `data fetch-binance` | Download real BTC/USDT trade archives from `data.binance.vision` |
 | `bars build` | Build dollar bars from raw trades |
 | `features fracdiff-search` | AFML minimum-*d* search on `ln(P)` and `sigma`, independently |
 | `features build-phasor` | Construct the phasor `z = sigma * exp(i * theta)` from frac-diffed inputs |
@@ -124,26 +125,21 @@ drive.mount("/content/drive")
 
 Then point the `--out`/`--out-bars`/`--out-regimes` flags below at a path under `/content/drive/MyDrive/...` instead of the repo directory.
 
-### 7. Run the pipeline
+### 7. Fetch real BTC/USDT data and run the pipeline
 
-Real market data ingestion (`data.binance.vision`) isn't implemented yet (see Status), so this walkthrough runs the full pipeline end-to-end on synthetic regime-switching data, exactly like the project's own validation approach. Each command mirrors one row of the CLI table above.
+`data fetch-binance` downloads real trade archives from `data.binance.vision` (BTC/USDT perpetual futures, per PLAN.md's dataset choice) — no synthetic data needed. Each archive's SHA256 checksum is verified against the one Binance publishes alongside it. This demo uses a narrow 3-day daily-archive window (~5MB/day) to keep the Colab download quick; PLAN.md's actual research sample is the full 2020-01-01 to 2025-12-31 range via monthly archives (`--frequency monthly`), which is multiple GB and only worth pulling once you're past a smoke test.
 
 ```python
 %%bash
 mkdir -p out
 
-# synthetic regime-switching config: 2 regimes, calm vs. volatile
-cat > out/synth_config.json <<'EOF'
-{
-  "transition_matrix": [[0.98, 0.02], [0.03, 0.97]],
-  "mu": [0.0001, -0.0002],
-  "sigma": [0.01, 0.03]
-}
-EOF
+uv run fin-regime-phasor data fetch-binance \
+  --symbol BTCUSDT --start 2024-06-01 --end 2024-06-03 \
+  --frequency daily --out out/trades.parquet
 
-uv run fin-regime-phasor synthetic generate \
-  --n-bars 2000 --config out/synth_config.json \
-  --out-bars out/bars.parquet --out-regimes out/regimes.npy --seed 0
+uv run fin-regime-phasor bars build \
+  --trades out/trades.parquet --out out/bars.parquet \
+  --target-bars-per-day 50 --day-span 3
 
 uv run fin-regime-phasor features fracdiff-search \
   --bars out/bars.parquet --series log_price --out out/dstar_logprice.json
@@ -178,19 +174,21 @@ uv run fin-regime-phasor benchmark grid \
   --phasor out/phasor.parquet --n-states 2 --n-symbols 8 --out out/benchmark_summary.json
 ```
 
-`--n-states`/`--n-symbols` above (2 regimes, 8 symbols) match the synthetic config for a quick smoke test; per PLAN.md these are real hyperparameters to sweep (BIC over `n in {2,3,4}`, a VQ-alphabet sweep) once you move past a sanity check.
+`--n-states`/`--n-symbols` above (2, 8) are placeholders for a quick smoke test; per PLAN.md these are real hyperparameters to sweep (BIC over `n in {2,3,4}`, a VQ-alphabet sweep, both on training folds only) once you move past that. Also per PLAN.md's research discipline, validate the HQMM against **synthetic** ground-truth regimes before trusting its output on real data like this — swap the first two commands above for `synthetic generate` (see the CLI table's `synthetic generate` entry, or `uv run fin-regime-phasor synthetic generate --help`) to run the identical rest of the pipeline against data with known planted regimes.
 
 ### 8. Generate figures
 
 ```python
 %%bash
 uv run fin-regime-phasor figures phasor-scatter \
-  --phasor out/phasor.parquet --regimes out/regimes.npy --out out/phasor_scatter.pdf
+  --phasor out/phasor.parquet --out out/phasor_scatter.pdf
 uv run fin-regime-phasor figures regime-timeline \
   --bars out/bars.parquet --hqmm-result out/hqmm.npz --out out/regime_timeline.pdf
 uv run fin-regime-phasor figures ablation-grid-bic \
   --summary out/benchmark_summary.json --out out/ablation_grid_bic.pdf
 ```
+
+(`figures phasor-scatter --regimes <path.npy>` overlays ground-truth regime labels when you have them, e.g. from `synthetic generate`'s `--out-regimes` — real market data has no such ground truth, hence it's omitted above.)
 
 `figures hqmm-loss-curve` needs a JSON list of per-step loss values, which `hqmm train` doesn't currently persist to disk (only the final metrics). Extract it directly from the library instead of the CLI:
 

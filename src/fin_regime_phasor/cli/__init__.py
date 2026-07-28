@@ -12,6 +12,7 @@ from fin_regime_phasor.cli import (
     bars_cmd,
     baselines_cmd,
     benchmark_cmd,
+    data_cmd,
     discretize_cmd,
     features_cmd,
     figures_cmd,
@@ -20,6 +21,7 @@ from fin_regime_phasor.cli import (
 )
 
 for module in (
+    data_cmd,
     bars_cmd,
     features_cmd,
     discretize_cmd,
