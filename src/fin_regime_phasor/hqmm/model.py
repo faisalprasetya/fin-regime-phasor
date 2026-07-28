@@ -30,6 +30,22 @@ def _skew_hermitian(g: jnp.ndarray) -> jnp.ndarray:
     return (g - jnp.conj(g).T) / 2.0
 
 
+def _expm_skew_hermitian(s: jnp.ndarray) -> jnp.ndarray:
+    """expm(S) for skew-Hermitian S via eigh(-i*S) rather than `jax.scipy.linalg.expm`.
+
+    `jax.scipy.linalg.expm`'s scaling-and-squaring Pade approximant needs a complex128
+    `lu`/`triangular_solve`, whose TPU lowering hits an internal XLA RET_CHECK (layout
+    mismatch in the double-precision-emulation custom call) -- CPU/GPU LAPACK/cuSolver
+    paths don't have this bug, but `eigh` is exact for Hermitian input and its TPU
+    fallback is a pure-matmul/QR algorithm with no such custom call, so it sidesteps
+    the bug on every backend instead of only working around it on two of three.
+    S skew-Hermitian => H = -i*S is Hermitian, and expm(S) = expm(i*H) = V exp(i*lambda) V^dagger.
+    """
+    h = -1j * s
+    eigvals, eigvecs = jnp.linalg.eigh(h)
+    return (eigvecs * jnp.exp(1j * eigvals)) @ jnp.conj(eigvecs).T
+
+
 def kraus_operators(generator: jnp.ndarray, n_states: int, n_symbols: int) -> jnp.ndarray:
     """Slice `n_symbols` (n_states x n_states) Kraus operators out of the dilation unitary.
 
@@ -38,7 +54,7 @@ def kraus_operators(generator: jnp.ndarray, n_states: int, n_symbols: int) -> jn
     """
     dim = n_states * n_symbols
     s = _skew_hermitian(generator.reshape(dim, dim))
-    u = jax.scipy.linalg.expm(s)
+    u = _expm_skew_hermitian(s)
     return u[:, :n_states].reshape(n_symbols, n_states, n_states)
 
 
