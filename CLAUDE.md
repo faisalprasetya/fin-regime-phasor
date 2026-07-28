@@ -8,7 +8,7 @@ Research project: build complex-valued "phasor" features (magnitude = Parkinson 
 
 ## Status
 
-Planning stage — no implementation code yet. Repo currently holds only PLAN.md, README, project scaffold (uv, ruff). When code lands, follow the layout below.
+Core pipeline implemented and tested (see layout below): phasor math, frac-diff + minimum-d search, dollar bars, VQ discretization, synthetic regime-switching data generator, classical baselines (Gaussian/categorical HMM, Hamilton, no-regime), HQMM (JAX Kraus operators), CUSUM structural breaks, 2x2 ablation-grid benchmark, backtest overlay (CPCV/embargo, deflated Sharpe, PBO), full Typer CLI, and a matplotlib paper style + figure commands. Not yet done: real market data ingestion (`data.binance.vision`), the paper itself, and running the pipeline end-to-end on real BTC/USDT data (everything so far is validated on synthetic ground truth + unit/property tests).
 
 ## Stack
 

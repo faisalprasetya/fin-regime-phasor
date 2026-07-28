@@ -1,0 +1,27 @@
+font.family: serif
+mathtext.fontset: cm
+font.size: 9
+axes.titlesize: 9
+axes.labelsize: 9
+xtick.labelsize: 8
+ytick.labelsize: 8
+legend.fontsize: 8
+
+axes.spines.top: False
+axes.spines.right: False
+axes.grid: False
+axes.linewidth: 0.6
+xtick.major.width: 0.6
+ytick.major.width: 0.6
+
+legend.frameon: False
+
+lines.linewidth: 1.2
+lines.markersize: 3
+
+image.cmap: viridis
+axes.prop_cycle: cycler('color', ['0072B2', 'D55E00', '009E73', 'CC79A7', 'E69F00', '56B4E9', 'F0E442', '000000'])
+
+savefig.bbox: tight
+savefig.pad_inches: 0.02
+figure.dpi: 150
