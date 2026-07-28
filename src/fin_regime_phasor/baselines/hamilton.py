@@ -24,10 +24,20 @@ class HamiltonFitResult:
 
 
 def fit_hamilton_markov_switching(log_returns: np.ndarray, n_states: int) -> HamiltonFitResult:
-    """Fit a switching-mean, switching-variance Markov regression on log-returns."""
+    """Fit a switching-mean, switching-variance Markov regression on log-returns.
+
+    `MarkovRegression`'s default EM warm-start has no variance floor, so on short
+    series (e.g. a small CPCV fold) it can drive one regime's variance to ~0, NaN-ing
+    the rest of the EM iteration and crashing `pinv`'s SVD deep inside statsmodels.
+    Falling back to random-restart search (no EM warm-start) sidesteps that
+    degenerate starting point instead of the whole benchmark grid dying on one fold.
+    """
     log_returns = np.asarray(log_returns, dtype=np.float64)
     model = MarkovRegression(log_returns, k_regimes=n_states, switching_variance=True)
-    fit_result = model.fit()
+    try:
+        fit_result = model.fit()
+    except np.linalg.LinAlgError:
+        fit_result = model.fit(em_iter=0, search_reps=20)
 
     smoothed_probs = np.asarray(fit_result.smoothed_marginal_probabilities)
     states = smoothed_probs.argmax(axis=1)
