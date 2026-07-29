@@ -57,8 +57,8 @@ def archive_url(symbol: str, period: str, market: str = "futures-um") -> str:
 
 
 def _iter_months(start: str, end: str) -> Iterator[str]:
-    start_year, start_month = (int(part) for part in start.split("-"))
-    end_year, end_month = (int(part) for part in end.split("-"))
+    start_year, start_month = (int(part) for part in start.split("-")[:2])
+    end_year, end_month = (int(part) for part in end.split("-")[:2])
     if (end_year, end_month) < (start_year, start_month):
         raise ValueError(f"end {end!r} precedes start {start!r}")
     year, month = start_year, start_month

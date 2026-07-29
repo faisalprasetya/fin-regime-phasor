@@ -185,7 +185,7 @@ PLAN.md's actual research sample is 2020-01-01 to 2025-12-31 via monthly archive
 mkdir -p out
 
 uv run fin-regime-phasor data fetch-binance \
-  --symbol BTCUSDT --start 2020-01-01 --end 2025-12-31 \
+  --symbol BTCUSDT --start 2020-01 --end 2025-12 \
   --frequency monthly --out out/trades_full.parquet
 
 uv run fin-regime-phasor bars build \

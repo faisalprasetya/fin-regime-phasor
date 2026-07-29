@@ -52,6 +52,14 @@ def test_iter_periods_monthly_spans_year_boundary():
     ]
 
 
+def test_iter_periods_monthly_accepts_full_date_strings():
+    assert list(iter_periods("monthly", "2020-01-01", "2020-03-31")) == [
+        "2020-01",
+        "2020-02",
+        "2020-03",
+    ]
+
+
 def test_iter_periods_daily_spans_month_boundary():
     assert list(iter_periods("daily", "2024-01-30", "2024-02-02")) == [
         "2024-01-30",
