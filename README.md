@@ -125,9 +125,9 @@ drive.mount("/content/drive")
 
 Then point the `--out`/`--out-bars`/`--out-regimes` flags below at a path under `/content/drive/MyDrive/...` instead of the repo directory.
 
-### 7. Fetch real BTC/USDT data and run the pipeline
+### 7. Smoke test: fetch a narrow slice of real data and run the pipeline end-to-end
 
-`data fetch-binance` downloads real trade archives from `data.binance.vision` (BTC/USDT perpetual futures, per PLAN.md's dataset choice) — no synthetic data needed. Each archive's SHA256 checksum is verified against the one Binance publishes alongside it. This demo uses a narrow 3-day daily-archive window (~5MB/day) to keep the Colab download quick; PLAN.md's actual research sample is the full 2020-01-01 to 2025-12-31 range via monthly archives (`--frequency monthly`), which is multiple GB and only worth pulling once you're past a smoke test.
+`data fetch-binance` downloads real trade archives from `data.binance.vision` (BTC/USDT perpetual futures, per PLAN.md's dataset choice) — no synthetic data needed. Each archive's SHA256 checksum is verified against the one Binance publishes alongside it. This demo uses a narrow 3-day daily-archive window (~5MB/day) to keep the Colab download quick, and fixed `--n-states`/`--n-symbols` placeholders rather than the BIC/alphabet sweep described in Section 8 — the point here is just to confirm every stage of the pipeline runs, not to produce a result worth reading.
 
 ```python
 %%bash
@@ -174,9 +174,108 @@ uv run fin-regime-phasor benchmark grid \
   --phasor out/phasor.parquet --n-states 2 --n-symbols 8 --out out/benchmark_summary.json
 ```
 
-`--n-states`/`--n-symbols` above (2, 8) are placeholders for a quick smoke test; per PLAN.md these are real hyperparameters to sweep (BIC over `n in {2,3,4}`, a VQ-alphabet sweep, both on training folds only) once you move past that. Also per PLAN.md's research discipline, validate the HQMM against **synthetic** ground-truth regimes before trusting its output on real data like this — swap the first two commands above for `synthetic generate` (see the CLI table's `synthetic generate` entry, or `uv run fin-regime-phasor synthetic generate --help`) to run the identical rest of the pipeline against data with known planted regimes.
+`--n-states`/`--n-symbols` above (2, 8) are hardcoded placeholders — good enough to smoke-test, not to trust. Also per PLAN.md's research discipline, validate the HQMM against **synthetic** ground-truth regimes before trusting its output on real data like this — swap the first two commands above for `synthetic generate` (see the CLI table's `synthetic generate` entry, or `uv run fin-regime-phasor synthetic generate --help`) to run the identical rest of the pipeline against data with known planted regimes.
 
-### 8. Generate figures
+### 8. Full run: select `n-states`/`n-symbols` on training data, then run at scale
+
+PLAN.md's actual research sample is 2020-01-01 to 2025-12-31 via monthly archives (`--frequency monthly`), which is multiple GB — pull it once you're past the smoke test above. Everything here runs on the training range only; the 2026-01-01-to-present window stays untouched until a single final evaluation pass (PLAN.md "Held-out test").
+
+```python
+%%bash
+mkdir -p out
+
+uv run fin-regime-phasor data fetch-binance \
+  --symbol BTCUSDT --start 2020-01-01 --end 2025-12-31 \
+  --frequency monthly --out out/trades_full.parquet
+
+uv run fin-regime-phasor bars build \
+  --trades out/trades_full.parquet --out out/bars_full.parquet \
+  --target-bars-per-day 50 --day-span 2191
+
+uv run fin-regime-phasor features fracdiff-search \
+  --bars out/bars_full.parquet --series log_price --out out/dstar_logprice_full.json
+uv run fin-regime-phasor features fracdiff-search \
+  --bars out/bars_full.parquet --series sigma --out out/dstar_sigma_full.json
+
+D_R=$(python -c "import json; print(json.load(open('out/dstar_logprice_full.json'))['d_star'])")
+D_SIGMA=$(python -c "import json; print(json.load(open('out/dstar_sigma_full.json'))['d_star'])")
+
+uv run fin-regime-phasor features build-phasor \
+  --bars out/bars_full.parquet --d-r "$D_R" --d-sigma "$D_SIGMA" --k 50.0 --out out/phasor_full.parquet
+```
+
+**Pick `n-symbols` (VQ-alphabet size)** — per PLAN.md ("VQ-alphabet size: own small sweep over alphabet size, tuned on training folds only"), fit a codebook per candidate size, discretize, then score each via a fixed-`n-states` categorical-HMM's BIC as a proxy (`discretize fit` itself emits no intrinsic distortion score to sweep on):
+
+```python
+%%bash
+for m in 8 12 16 24; do
+  uv run fin-regime-phasor discretize fit \
+    --phasor out/phasor_full.parquet --n-symbols "$m" --out "out/codebook_m${m}.npz"
+  uv run fin-regime-phasor discretize apply \
+    --phasor out/phasor_full.parquet --codebook "out/codebook_m${m}.npz" --out "out/symbols_m${m}.parquet"
+  uv run fin-regime-phasor baselines categorical-hmm \
+    --symbols "out/symbols_m${m}.parquet" --n-states 2 --n-symbols "$m" \
+    --out "out/categorical_hmm_m${m}.json"
+done
+
+python -c "
+import json, glob
+scores = {f: json.load(open(f))['bic'] for f in glob.glob('out/categorical_hmm_m*.json')}
+for f, b in sorted(scores.items(), key=lambda kv: kv[1]):
+    print(f'{f}: bic={b:.2f}')
+print('best:', min(scores, key=scores.get))
+"
+```
+
+Set `N_SYMBOLS` to whichever alphabet size had the lowest BIC, then apply the matching codebook as `out/symbols_full.parquet` (copy or re-run `discretize apply` with that codebook).
+
+**Pick `n-states` (regime count)** — per PLAN.md ("Regime count n: decided by BIC, restricted to the interpretable range n in {2,3,4}"), not an unbounded search, and BIC alone is known to under-select regime count in Markov-switching models (Psaradakis & Spagnolo, 2003) — cross-check the winner qualitatively against the `figures regime-timeline` plot and a CUSUM structural-break pass before committing:
+
+```python
+%%bash
+N_SYMBOLS=8   # from the sweep above
+
+for n in 2 3 4; do
+  uv run fin-regime-phasor baselines categorical-hmm \
+    --symbols out/symbols_full.parquet --n-states "$n" --n-symbols "$N_SYMBOLS" \
+    --out "out/categorical_hmm_n${n}.json"
+done
+
+python -c "
+import json, glob
+scores = {f: json.load(open(f))['bic'] for f in glob.glob('out/categorical_hmm_n*.json')}
+for f, b in sorted(scores.items(), key=lambda kv: kv[1]):
+    print(f'{f}: bic={b:.2f}')
+print('best:', min(scores, key=scores.get))
+"
+```
+
+With `N_STATES`/`N_SYMBOLS` fixed to the winners of both sweeps, run the full pipeline (HQMM, all classical baselines, and the ablation grid) on the full-scale data:
+
+```python
+%%bash
+N_STATES=2      # from the BIC sweep above
+N_SYMBOLS=8     # from the alphabet sweep above
+
+uv run fin-regime-phasor hqmm train \
+  --symbols out/symbols_full.parquet --n-states "$N_STATES" --n-symbols "$N_SYMBOLS" --out out/hqmm_full.npz
+
+uv run fin-regime-phasor baselines gaussian-hmm \
+  --features out/phasor_full.parquet --n-states "$N_STATES" --out out/gaussian_hmm_full.json
+uv run fin-regime-phasor baselines categorical-hmm \
+  --symbols out/symbols_full.parquet --n-states "$N_STATES" --n-symbols "$N_SYMBOLS" --out out/categorical_hmm_full.json
+uv run fin-regime-phasor baselines hamilton \
+  --returns out/phasor_full.parquet --n-states "$N_STATES" --out out/hamilton_full.json
+uv run fin-regime-phasor baselines naive \
+  --returns out/phasor_full.parquet --out out/naive_full.json
+
+uv run fin-regime-phasor benchmark grid \
+  --phasor out/phasor_full.parquet --n-states "$N_STATES" --n-symbols "$N_SYMBOLS" --out out/benchmark_summary_full.json
+```
+
+Both sweeps above use `hmmlearn`-backed classical baselines (cheap) as a proxy for hyperparameter selection, per PLAN.md's leakage-control discipline (anything fit on data must fit on training folds only) — `hqmm train` itself is the expensive GPU/TPU step and is run once, after `N_STATES`/`N_SYMBOLS` are already fixed.
+
+### 9. Generate figures
 
 ```python
 %%bash
